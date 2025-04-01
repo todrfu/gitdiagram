@@ -8,7 +8,7 @@ export function useStarReminder() {
     // Check if we've already shown the toast
     const hasShownStarReminder = localStorage.getItem("hasShownStarReminder");
 
-    if (hasShownStarReminder) {
+    if (!hasShownStarReminder) {
       // Set a timeout to show the toast after 3 seconds
       const timeoutId = setTimeout(() => {
         toast("Enjoying GitDiagram?", {
