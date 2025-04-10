@@ -12,6 +12,7 @@ if (typeof window !== "undefined") {
     posthog.init(posthogKey, {
       api_host: "/ingest",
       ui_host: "https://us.posthog.com",
+      person_profiles: "always",
     });
   } else {
     console.log(
