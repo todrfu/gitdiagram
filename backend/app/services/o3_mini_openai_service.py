@@ -1,6 +1,7 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 from app.utils.format_message import format_user_message
+from app.services.ai_service_base import AIServiceBase
 import tiktoken
 import os
 import aiohttp
@@ -10,7 +11,7 @@ from typing import AsyncGenerator, Literal
 load_dotenv()
 
 
-class OpenAIo3Service:
+class OpenAIo3Service(AIServiceBase):
     def __init__(self):
         self.default_client = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -18,7 +19,7 @@ class OpenAIo3Service:
         self.encoding = tiktoken.get_encoding("o200k_base")  # Encoder for OpenAI models
         self.base_url = "https://api.openai.com/v1/chat/completions"
 
-    def call_o3_api(
+    def call_api(
         self,
         system_prompt: str,
         data: dict,
@@ -32,6 +33,7 @@ class OpenAIo3Service:
             system_prompt (str): The instruction/system prompt
             data (dict): Dictionary of variables to format into the user message
             api_key (str | None): Optional custom API key
+            reasoning_effort: Level of reasoning effort (low/medium/high)
 
         Returns:
             str: o3-mini's response text
@@ -69,7 +71,7 @@ class OpenAIo3Service:
             print(f"Error in OpenAI o3-mini API call: {str(e)}")
             raise
 
-    async def call_o3_api_stream(
+    async def call_api_stream(
         self,
         system_prompt: str,
         data: dict,
@@ -83,6 +85,7 @@ class OpenAIo3Service:
             system_prompt (str): The instruction/system prompt
             data (dict): Dictionary of variables to format into the user message
             api_key (str | None): Optional custom API key
+            reasoning_effort: Level of reasoning effort (low/medium/high)
 
         Yields:
             str: Chunks of o3-mini's response text
@@ -94,25 +97,6 @@ class OpenAIo3Service:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key or self.default_client.api_key}",
         }
-
-        # payload = {
-        #     "model": "o3-mini",
-        #     "messages": [
-        #         {
-        #             "role": "user",
-        #             "content": f"""
-        #             <VERY_IMPORTANT_SYSTEM_INSTRUCTIONS>
-        #             {system_prompt}
-        #             </VERY_IMPORTANT_SYSTEM_INSTRUCTIONS>
-        #             <USER_INSTRUCTIONS>
-        #             {user_message}
-        #             </USER_INSTRUCTIONS>
-        #             """,
-        #         },
-        #     ],
-        #     "max_completion_tokens": 12000,
-        #     "stream": True,
-        # }
 
         payload = {
             "model": "o3-mini",

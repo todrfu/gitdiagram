@@ -39,7 +39,17 @@ interface StreamResponse {
   error?: string;
 }
 
-export function useDiagram(username: string, repo: string) {
+// AI平台到localStorage键名的映射
+const AI_PLATFORM_KEYS = {
+  openai: "openai_key",
+  anthropic: "anthropic_key",
+  deepseek: "deepseek_key"
+};
+
+// 默认AI平台
+const DEFAULT_AI_PLATFORM = "openai";
+
+export function useDiagram(username: string, repo: string, platform = "github") {
   const [diagram, setDiagram] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -48,6 +58,7 @@ export function useDiagram(username: string, repo: string) {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   // const [tokenCount, setTokenCount] = useState<number>(0);
   const [state, setState] = useState<StreamState>({ status: "idle" });
+  const [aiPlatform, setAiPlatform] = useState<string>(DEFAULT_AI_PLATFORM);
   const [hasUsedFreeGeneration, setHasUsedFreeGeneration] = useState<boolean>(
     () => {
       if (typeof window === "undefined") return false;
@@ -55,8 +66,14 @@ export function useDiagram(username: string, repo: string) {
     },
   );
 
+  // 获取当前AI平台的API密钥
+  const getCurrentAiPlatformKey = useCallback(() => {
+    const keyName = AI_PLATFORM_KEYS[aiPlatform as keyof typeof AI_PLATFORM_KEYS] || AI_PLATFORM_KEYS.openai;
+    return localStorage.getItem(keyName) ?? undefined;
+  }, [aiPlatform]);
+
   const generateDiagram = useCallback(
-    async (instructions = "", githubPat?: string) => {
+    async (instructions = "", gitToken?: string) => {
       setState({
         status: "started",
         message: "Starting generation process...",
@@ -65,17 +82,37 @@ export function useDiagram(username: string, repo: string) {
       try {
         const baseUrl =
           process.env.NEXT_PUBLIC_API_DEV_URL ?? "https://api.gitdiagram.com";
+          
+        // 获取存储的Git平台配置（私有仓库）
+        let token = gitToken;
+        
+        if (platform === "gitlab") {
+          const storedToken = localStorage.getItem("gitlab_token");
+          
+          if (!token && storedToken) {
+            token = storedToken;
+          }
+        } else if (platform === "gitea") {
+          const storedToken = localStorage.getItem("gitea_token");
+          
+          if (!token && storedToken) {
+            token = storedToken;
+          }
+        }
+        
         const response = await fetch(`${baseUrl}/generate/stream`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            platform,
             username,
             repo,
             instructions,
-            api_key: localStorage.getItem("openai_key") ?? undefined,
-            github_pat: githubPat,
+            api_key: getCurrentAiPlatformKey(),
+            git_token: token,
+            ai_platform: aiPlatform
           }),
         });
         if (!response.ok) {
@@ -226,13 +263,13 @@ export function useDiagram(username: string, repo: string) {
         setLoading(false);
       }
     },
-    [username, repo, hasUsedFreeGeneration],
+    [username, repo, platform, hasUsedFreeGeneration, aiPlatform, getCurrentAiPlatformKey],
   );
 
   useEffect(() => {
     if (state.status === "complete" && state.diagram) {
       // Cache the completed diagram with the usedOwnKey flag
-      const hasApiKey = !!localStorage.getItem("openai_key");
+      const hasApiKey = !!getCurrentAiPlatformKey();
       void cacheDiagramAndExplanation(
         username,
         repo,
@@ -247,7 +284,7 @@ export function useDiagram(username: string, repo: string) {
     } else if (state.status === "error") {
       setLoading(false);
     }
-  }, [state.status, state.diagram, username, repo, state.explanation]);
+  }, [state.status, state.diagram, username, repo, state.explanation, getCurrentAiPlatformKey]);
 
   const getDiagram = useCallback(async () => {
     setLoading(true);
@@ -257,7 +294,15 @@ export function useDiagram(username: string, repo: string) {
     try {
       // Check cache first - always allow access to cached diagrams
       const cached = await getCachedDiagram(username, repo);
-      const github_pat = localStorage.getItem("github_pat");
+      
+      // 获取存储的Git平台配置
+      let gitToken = null;
+      
+      if (platform === "gitlab") {
+        gitToken = localStorage.getItem("gitlab_token");
+      } else if (platform === "gitea") {
+        gitToken = localStorage.getItem("gitea_token");
+      }
 
       if (cached) {
         setDiagram(cached);
@@ -266,31 +311,17 @@ export function useDiagram(username: string, repo: string) {
         return;
       }
 
-      // TEMP: LET USERS HAVE INFINITE GENERATIONS
-      // Only check for API key if we need to generate a new diagram
-      // const storedApiKey = localStorage.getItem("openai_key");
-      // if (hasUsedFreeGeneration && !storedApiKey) {
-      //   setError(
-      //     "You've used your one free diagram. Please enter your API key to continue. As a student, I can't afford to keep it totally free and I hope you understand :)",
-      //   );
-      //   setState({ status: "error", error: "API key required" });
-      //   return;
-      // }
-
       // Get cost estimate
       const costEstimate = await getCostOfGeneration(
         username,
         repo,
         "",
-        github_pat ?? undefined,
+        gitToken ?? undefined,
+        platform
       );
 
       if (costEstimate.error) {
         console.error("Cost estimation failed:", costEstimate.error);
-        // if (costEstimate.requires_api_key) {
-        //   setTokenCount(costEstimate.token_count ?? 0);
-        // }
-        // TODO: come to think of it, why is requires api key based on tokens? this unimplemented option is smarter. Add API key dialog
         setError(costEstimate.error);
         return;
       }
@@ -298,17 +329,15 @@ export function useDiagram(username: string, repo: string) {
       setCost(costEstimate.cost ?? "");
 
       // Start streaming generation
-      await generateDiagram("", github_pat ?? undefined);
+      await generateDiagram("", gitToken ?? undefined);
 
-      // Note: The diagram and lastGenerated will be set by the generateDiagram function
-      // through the state updates
     } catch (error) {
       console.error("Error in getDiagram:", error);
       setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
     }
-  }, [username, repo, generateDiagram]);
+  }, [username, repo, platform, generateDiagram]);
 
   useEffect(() => {
     void getDiagram();
@@ -350,21 +379,22 @@ export function useDiagram(username: string, repo: string) {
     setError("");
     setCost("");
     try {
-      const github_pat = localStorage.getItem("github_pat");
+      // 获取存储的Git平台配置
+      let gitToken = null;
+      
+      if (platform === "gitlab") {
+        gitToken = localStorage.getItem("gitlab_token");
+      } else if (platform === "gitea") {
+        gitToken = localStorage.getItem("gitea_token");
+      }
 
-      // TEMP: LET USERS HAVE INFINITE GENERATIONS
-      // const storedApiKey = localStorage.getItem("openai_key");
-
-      // Check if user has used their free generation and doesn't have an API key
-      // if (hasUsedFreeGeneration && !storedApiKey) {
-      //   setError(
-      //     "You've used your one free diagram. Please enter your API key to continue. As a student, I can't afford to keep it totally free and I hope you understand :)",
-      //   );
-      //   setLoading(false);
-      //   return;
-      // }
-
-      const costEstimate = await getCostOfGeneration(username, repo, "");
+      const costEstimate = await getCostOfGeneration(
+        username, 
+        repo, 
+        "",
+        gitToken ?? undefined,
+        platform
+      );
 
       if (costEstimate.error) {
         console.error("Cost estimation failed:", costEstimate.error);
@@ -375,7 +405,7 @@ export function useDiagram(username: string, repo: string) {
       setCost(costEstimate.cost ?? "");
 
       // Start streaming generation with instructions
-      await generateDiagram(instructions, github_pat ?? undefined);
+      await generateDiagram(instructions, gitToken ?? undefined);
     } catch (error) {
       console.error("Error regenerating diagram:", error);
       setError("Failed to regenerate diagram. Please try again later.");
@@ -438,13 +468,13 @@ export function useDiagram(username: string, repo: string) {
     }
   };
 
-  const handleApiKeySubmit = async (apiKey: string) => {
+  const handleApiKeySubmit = async (apiKey: string, platform: string) => {
     setShowApiKeyDialog(false);
     setLoading(true);
     setError("");
 
-    // Store the key first
-    localStorage.setItem("openai_key", apiKey);
+    // 更新当前AI平台
+    setAiPlatform(platform);
 
     // Then generate diagram using stored key
     const github_pat = localStorage.getItem("github_pat");
@@ -452,7 +482,7 @@ export function useDiagram(username: string, repo: string) {
       await generateDiagram("", github_pat ?? undefined);
     } catch (error) {
       console.error("Error generating with API key:", error);
-      setError("Failed to generate diagram with provided API key.");
+      setError(`Failed to generate diagram with provided ${platform} API key.`);
     } finally {
       setLoading(false);
     }
@@ -482,5 +512,7 @@ export function useDiagram(username: string, repo: string) {
     handleOpenApiKeyDialog,
     handleExportImage,
     state,
+    aiPlatform,
+    setAiPlatform,
   };
 }

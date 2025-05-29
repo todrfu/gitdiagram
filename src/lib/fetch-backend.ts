@@ -132,7 +132,9 @@ export async function getCostOfGeneration(
   username: string,
   repo: string,
   instructions: string,
-  github_pat?: string,
+  git_token?: string,
+  platform = "github",
+  git_api_url?: string,
 ): Promise<CostApiResponse> {
   try {
     const baseUrl =
@@ -145,9 +147,11 @@ export async function getCostOfGeneration(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        platform,
         username,
         repo,
-        github_pat: github_pat,
+        git_token,
+        git_api_url,
         instructions: instructions ?? "",
       }),
     });

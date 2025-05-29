@@ -93,6 +93,15 @@ pnpm db:push
 
 You can view and interact with the database using `pnpm db:studio`
 
+When you encounter the error: `FATAL: password authentication failed for user "postgres"`, you can modify the pg_hba.conf file：
+
+```bash
+# enter the container and edit the file: /var/lib/postgresql/data/pg_hba.conf
+
+# modify "host all all all scram-sha-256" to host all all all trust
+host all all all trust
+```
+
 7. Run Frontend
 
 ```bash

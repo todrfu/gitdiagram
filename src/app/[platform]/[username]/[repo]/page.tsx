@@ -12,7 +12,12 @@ import { useStarReminder } from "~/hooks/useStarReminder";
 
 export default function Repo() {
   const [zoomingEnabled, setZoomingEnabled] = useState(false);
-  const params = useParams<{ username: string; repo: string }>();
+  const params = useParams<{ platform: string; username: string; repo: string }>();
+
+  // 使用URL参数获取平台、用户名和仓库名
+  const platform = params.platform.toLowerCase();
+  const username = params.username.toLowerCase();
+  const repo = params.repo.toLowerCase();
 
   // Use the star reminder hook
   useStarReminder();
@@ -32,15 +37,16 @@ export default function Repo() {
     handleOpenApiKeyDialog,
     handleExportImage,
     state,
-  } = useDiagram(params.username.toLowerCase(), params.repo.toLowerCase());
+  } = useDiagram(username, repo, platform);
 
   return (
     <div className="flex flex-col items-center p-4">
       <div className="flex w-full justify-center pt-8">
         <MainCard
           isHome={false}
-          username={params.username.toLowerCase()}
-          repo={params.repo.toLowerCase()}
+          platform={platform}
+          username={username}
+          repo={repo}
           showCustomization={!loading && !error}
           onModify={handleModify}
           onRegenerate={handleRegenerate}
@@ -87,4 +93,4 @@ export default function Repo() {
       />
     </div>
   );
-}
+} 

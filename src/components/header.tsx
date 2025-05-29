@@ -25,14 +25,31 @@ export function Header() {
     return count.toString();
   };
 
-  const handlePrivateReposSubmit = (pat: string) => {
-    // Store the PAT in localStorage
-    localStorage.setItem("github_pat", pat);
+  const handlePrivateReposSubmit = (token: string, platform: string) => {
+    // 根据平台类型存储对应的令牌
+    if (platform === "github") {
+      localStorage.setItem("github_pat", token);
+    } else if (platform === "gitlab") {
+      localStorage.setItem("gitlab_token", token);
+    } else if (platform === "gitea") {
+      localStorage.setItem("gitea_token", token);
+    }
     setIsPrivateReposDialogOpen(false);
   };
 
-  const handleApiKeySubmit = (apiKey: string) => {
-    localStorage.setItem("openai_key", apiKey);
+  const handleApiKeySubmit = (apiKey: string, platform: string) => {
+    // 根据平台存储API密钥
+    const keyMap: Record<string, string> = {
+      openai: "openai_key",
+      anthropic: "anthropic_key",
+      deepseek: "deepseek_key"
+    };
+    
+    const keyName = keyMap[platform];
+    if (keyName) {
+      localStorage.setItem(keyName, apiKey);
+    }
+    
     setIsApiKeyDialogOpen(false);
   };
 
